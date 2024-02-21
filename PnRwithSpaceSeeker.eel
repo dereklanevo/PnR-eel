@@ -1,0 +1,313 @@
+// 99% of this is taken from JRK's solution for moving markers to quiet spaces
+// found here https://forums.cockos.com/showthread.php?t=250487
+// I just swapped out the iterated marker moving and swapped in moving
+// the edit cursor (then restarting recording)
+// waiting code came from NoFish, who got it from Schwa
+// here http:s//forum.cockos.com/showthread.php?t=168270
+
+////////////////////////// User edits ///////////////////////////////////////
+SOURCE_TRACK = 0 ; // set the controlling track !!Zero Indexed!! meaning "0" = track 1
+BEATS_BACK = 4; // number of beats to move back before searching for silence
+PNR_MEASURES_PREROLL = 4; // set the number of measures to play before recording
+TIME_UNTIL_REMUTE = 5; //how long to wait until re-muting the track (if it was muted before)
+			  //I'd advise keeping this slightly longer than your play in (PNR_MEASURES_PREROLL)
+			  //because the countdown starts at the beginning of the play in
+
+//setting BPM to sixty with time signature of 1/4 means each beat is 1 second and each measure is 4 seconds
+PNR_BPM = 60; // bpm to use while moving edit cursor
+PNR_TIMESIG_NUMERATOR = 1; //sets numerator of time signature during PnR operation
+PNR_TIMESIG_DENOMINATOR = 4; //set denominator of time signture during PnR operation
+
+//technical stuff
+THRESHOLD = 0.006;  // sound level below which a block is considered "silent"
+WINDOW_TIME = 0.25; // size of block to check for exceeding threshold
+SEARCH_INCREMENT = .01; //offset to incrementally shift the block left when searching for silent gap end and beginning
+SLICE_OFFSET = .3; // percent to move cursor forward into silent area after determing beginning of silent section
+		     // to avoid clipping off the end of a word
+/////////////////////////////////////////////////////////////////////////////
+
+
+//get the project samplerate, assign 9600 if the query fails
+GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0)  ?
+    (
+    SAMPLERATE = GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0);
+    )
+   :
+    (
+    SAMPLERATE = 9600;
+    );
+
+
+//get the buffer size from the audio device, if the query fails, assign 4096
+GetAudioDeviceInfo("BSIZE",#devicebufsizestring) ?
+    (
+    match("%d",#devicebufsizestring,DEVICE_BUF_SIZE);
+    )
+   :
+    (
+    DEVICE_BUF_SIZE = 4096;
+    );
+
+
+
+WINDOW_LENGTH = (WINDOW_TIME  * SAMPLERATE) ;// how many samples per array when testing?
+BLOCK_LEN = DEVICE_BUF_SIZE;
+BLOCK_TIME = BLOCK_LEN / SAMPLERATE;
+
+window_buf = DEVICE_BUF_SIZE; // or wherever you want to set it to;
+temp_buf = window_buf + (WINDOW_LENGTH * 2);
+
+
+function fill_array(track, stime, len, arr_to_fill)
+local(i monoabsval)
+(
+
+  accessor = CreateTrackAudioAccessor(track);     
+  
+  memset(temp_buf,0,BLOCK_LEN*2);
+
+// do this in blocks.
+  blocks = floor(len / BLOCK_LEN);
+  k = 0;
+  while (k < blocks)
+  (
+    
+    from_t =  stime + (k*BLOCK_LEN)/SAMPLERATE;
+    smpls_ret = 
+    GetAudioAccessorSamples(
+      accessor, 
+      SAMPLERATE,
+      2, 
+      from_t,
+      BLOCK_LEN,
+      temp_buf);
+  
+    i = 0;
+    while (i<BLOCK_LEN)
+    (
+      j = i*2;
+      monoabsval = abs(temp_buf[j]) + abs(temp_buf[j+1]); //interleaved stereo
+      arr_to_fill[(k*BLOCK_LEN) + i] =  monoabsval ;  
+  
+      i += 1;
+    );
+    k += 1;
+  );
+  DestroyAudioAccessor(accessor);
+);
+
+function mean_buffer(buf,len)
+local (i ret)
+(
+  tot = 0; //stores the total measured magnitude of samples in block
+  i = 0;
+  while (i<len)
+  (
+    tot += buf[i];
+    i +=1;
+  );
+
+  ret = tot / len; //finds the average magnitude of samples in block
+
+  ret;
+);
+
+function over_threshold(qtime)
+(
+    fill_array(TRACK, qtime - (WINDOW_TIME/2), WINDOW_LENGTH, window_buf); //fills buffer with measures of samples
+    over = 
+      mean_buffer(window_buf, WINDOW_LENGTH) - (THRESHOLD/2); // great than zero if average in buffer exceeds threshhold
+								      // less than or equal to zero if unnder or equal to threshold
+
+);
+
+
+function runloop()
+//waits 5 seconds and then executes the actions
+(
+  wait_time_in_seconds = TIME_UNTIL_REMUTE;
+  
+  newtime=time_precise();
+  
+  (loopcount < 1) ?
+	  (
+	    (newtime-lasttime >= wait_time_in_seconds) ?
+	      (
+	      lasttime=newtime;
+	      // do whatever you want to do every x seconds
+	      loopcount = loopcount+1;
+	      )
+	  )
+  :
+	    (
+	    //--------------------------------------------------
+	    // PUT ACTION(S) YOU WANT TO RUN AFTER WAITING HERE
+	    
+	
+	    // mute selected tracks
+	    SetMediaTrackInfo_Value(TRACK, "B_MUTE", TRACK_MUTED_BOOL);
+	    // go to play position 
+	    Main_OnCommand(40150, 0);
+	    // continuous scrolling during playback
+	    Main_OnCommand(41817, 0);
+	    
+	    //--------------------------------------------------
+	    
+	
+	    loopcount = loopcount+1;
+	    );
+  (loopcount < 2) ?
+	  (
+	  defer("runloop();"); 
+	  );
+);
+
+function setActionEnabled(action, state) //set variables with no "set" command, only "toggle"
+(
+ ACTION_STATE = GetToggleCommandState(action);
+  ACTION_STATE != state ?
+    (
+    Main_OnCommand(action, 0);
+    );
+  );
+
+/*  Get this function working in the future for possibly allowing dynamicly controlling track assignment
+function setTargetTrack(proj)
+(
+	startpos = GetCursorPosition();
+	SELECTED_TRACK_COUNT = CountSelectedTracks(0);
+	
+	(SELECTED_TRACK_COUNT > 0) ? //if tracks are selected, check to see if the first selected has items.
+		(
+		Main_OnCommand(40914, 0); //set first selected track as last touched track
+		
+		TRACK = GetSelectedTrack(0,0);
+		
+		CountTrackMediaItems(TRACK);
+		)
+		: //if no tracks are selected, select track 1
+		(
+		Main_OnCommand(40939, 0); //select track 01
+		Main_OnCommand(40914, 0); //set first selected track as last touched track
+		TRACK = GetSelectedTrack(0,0);
+		);
+	
+	TRACK;
+);
+*/
+
+function main()
+(
+   bpos = 0; //start of silence window
+   epos = 0; //end of silence window
+
+   //get project variables so they can be restored after PnR is done
+   PROJECT_PREROLL_ONRECORD_STATE = GetToggleCommandState(41819); // get and store the current Preroll on record state
+   PROJECT_PREROLLMEAS_COUNT = SNM_GetDoubleConfigVar("prerollmeas",-1); // get and store the current Prerollmeas value
+   PROJECT_BPM = SNM_GetDoubleConfigVar("projbpm", -1);
+   PROJECT_TIMESIG_TOP = SNM_GetIntConfigVar("projmeaslen", -1);
+   PROJECT_TIMESIG_BOTTOM = SNM_GetIntConfigVar("projtsdenom", -1);
+
+   //set variables for PnR
+   setActionEnabled(41819, 1); // set Preroll on record to "true"
+   SNM_SetDoubleConfigVar("prerollmeas", PNR_MEASURES_PREROLL); //set preroll to PNR preference
+   SNM_SetDoubleConfigVar("projbpm", PNR_BPM); //sets beats per minute to PNR preference
+   SNM_SetIntConfigVar("projmeaslen", PNR_TIMESIG_NUMERATOR); //sets time signature numerator to PNR preference
+   SNM_SetIntConfigVar("projtsdenom", PNR_TIMESIG_DENOMINATOR); //sets time signature denominator to PNR preference
+
+   startpos = GetCursorPosition(); //get the cursor to the right place after setting the track
+
+   //make sure the target track is the one set in the variables
+   Main_OnCommand(40296, 0); //select all tracks
+   TRACK = GetSelectedTrack(0, SOURCE_TRACK); //zero indexed, so strictly speaking it's the value of SOURCE_TRACK + 1
+   SetOnlyTrackSelected(TRACK);
+   Main_OnCommand(40914, 0); // set first track selected as the last touched, should be first of one at this point...
+
+   TRACK_MUTED_BOOL = GetMediaTrackInfo_Value(TRACK, "B_MUTE"); //checks to see if artist records with DAW montoring on
+  
+   // puts the cursor back in place just in case it got shifted when the active track was selected.
+    SetEditCurPos(startpos, false, false); 
+
+    //set pre roll on record to true
+    setActionEnabled(41819, 1);
+
+//Start the actual actions of PnR
+
+    // stop recording
+    Main_OnCommand(1016, 0);
+    // unmute selected tracks if they're muted
+    TRACK_MUTED_BOOL ? Main_OnCommand(40731, 0);
+    
+//This shuffle seems necessary to ensure the cursor is at the last recorded point.
+    // Select and move to previous item
+    Main_OnCommand(40416, 0);
+    // move cursor to right edge of item
+    Main_OnCommand(40319, 0);
+    
+    //loop to move the cursor back BEATS_BACK number of beats before beginning the search for a silent section
+   loop (BEATS_BACK,
+	// move edit cursor back one beat (no seek)
+	Main_OnCommand(40842, 0);
+	);
+    
+    //establish variabls for the searching startpoint
+    mpos = GetCursorPosition();
+  
+    //incrementaly shift left until a silent section of at least WINDOW_TIME is found
+   
+   //first shift the start point (I don't remember why it's called "mpos") left until a block average
+   //stays below the threshold
+	while ( (over_threshold(mpos) > 0) && (mpos>0) ) // "mpos>0" ensure you don't iterate past the start of the track
+    (
+      mpos -=SEARCH_INCREMENT;
+     );
+    
+    //set epos (end pos) to mpos, this is the left end of the silent setion
+    epos = mpos; 
+      
+	//keep shifting left until the next block with a block average exceeds the threshold
+     while ( (over_threshold(mpos) <= 0) && (mpos>0) )
+    (
+      mpos -=SEARCH_INCREMENT;
+     );
+     
+   // when the next sound is found, set bpos (beginning pos) to mpos
+    bpos = mpos; 
+    silence_length = epos - bpos;
+    
+    
+    //it's hard to calibrate sensitivety just right, so this shifts back into the silent area
+    //to avoid clipping off the end of a word
+    slice_point = silence_length * SLICE_OFFSET;
+    mpos=bpos+slice_point;
+    
+    //set the location you're going to punch in
+    SetEditCurPos(mpos, false, false);
+   
+   // start recording at edit cursor
+   Main_OnCommand(40046, 0);
+  
+   //prep for the delayed re-activation of DAW muting (if it was turned on before PNR)
+   lasttime=time_precise();
+   loopcount=0;
+   defer("runloop();");
+ 
+
+   //return variables to original settings, if settings are <= 0 then no data was found during initial query
+   PROJECT_PREROLL_ONRECORD_STATE ? setActionEnabled(41819, PROJECT_PREROLL_ONRECORD_STATE); // set Preroll on record to original state
+   PROJECT_PREROLLMEAS_COUNT ? SNM_SetDoubleConfigVar("prerollmeas", PROJECT_PREROLLMEAS_COUNT); //set preroll measures to original state
+   PROJECT_BPM ? SNM_SetDoubleConfigVar("projbpm", PROJECT_BPM); //sets beats per minute to original state
+   PROJECT_TIMESIG_TOP ? SNM_SetIntConfigVar("projmeaslen", PROJECT_TIMESIG_TOP); //sets time signature numerator to original state
+   PROJECT_TIMESIG_BOTTOM ? SNM_SetIntConfigVar("projtsdenom", PROJECT_TIMESIG_BOTTOM); //sets time signature denominator to original state
+
+
+
+);
+
+// Body of script
+Undo_BeginBlock(); // set the undo startpoint
+
+main(); // run the main function
+
+
+Undo_EndBlock("Punch and Roll", -1); //set the undo endpoint and give it a name
