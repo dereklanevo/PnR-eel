@@ -2,7 +2,7 @@
 Punch and Roll script for Reaper DAW written in EEL
 
 This script provides a single button custom action to find a break in the audio, play a lead in and then restart recording\
-//99% of this is taken from JRK's solution for moving markers to quiet spaces found here https://forums.cockos.com/showthread.php?t=250487\
+//99% of this is taken from JRK's solution for moving markers to quiet spaces found here https://forums.cockos.com/showthread.php?t=250487 \
 // I just swapped out the iterated marker moving and swapped in moving the edit cursor (then restarting recording)\
 // waiting code came from NoFish, who got it from Schwa here http:s//forum.cockos.com/showthread.php?t=168270\
 
