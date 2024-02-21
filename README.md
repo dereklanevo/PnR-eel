@@ -6,6 +6,8 @@ This script provides a single button custom action to find a break in the audio,
 // I just swapped out the iterated marker moving and swapped in moving the edit cursor (then restarting recording)\
 // waiting code came from NoFish, who got it from Schwa here http:s//forum.cockos.com/showthread.php?t=168270\
 
+***** Requires the  SWS extension be installed. Download it here: https://www.sws-extension.org/
+
 Variables for customization follow:
 
 ////////////////////////// User edits ///////////////////////////////////////\
