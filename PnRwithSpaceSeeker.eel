@@ -26,38 +26,6 @@ SLICE_OFFSET = .3; // percent to move cursor forward into silent area after dete
 		     // to avoid clipping off the end of a word
 /////////////////////////////////////////////////////////////////////////////
 
-/*
-//get the project samplerate, assign 9600 if the query fails
-GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0)  ?
-    (
-    SAMPLERATE = GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0);
-    )
-   :
-    (
-    SAMPLERATE = 9600;
-    );
-
-
-//get the buffer size from the audio device, if the query fails, assign 4096
-GetAudioDeviceInfo("BSIZE",#devicebufsizestring) ?
-    (
-    match("%d",#devicebufsizestring,DEVICE_BUF_SIZE);
-    )
-   :
-    (
-    DEVICE_BUF_SIZE = 4096;
-    );
-
-
-
-WINDOW_LENGTH = (WINDOW_TIME  * SAMPLERATE) ;// how many samples per array when testing?
-BLOCK_LEN = DEVICE_BUF_SIZE;
-BLOCK_TIME = BLOCK_LEN / SAMPLERATE;
-
-window_buf = DEVICE_BUF_SIZE; // or wherever you want to set it to;
-temp_buf = window_buf + (WINDOW_LENGTH * 2);
-*/
-
 function fill_array(track, stime, len, arr_to_fill, temp_buf, BLOCK_LEN, SAMPLERATE)
 local(i monoabsval)
 (
@@ -122,7 +90,7 @@ function over_threshold(qtime, temp_buf, BLOCK_LEN, SAMPLERATE, TRACK, WINDOW_TI
 );
 
 
-function runloop()
+function runloop(TIME_UNTIL_REMUTE, lasttime)
 //waits 5 seconds and then executes the actions
 (
   wait_time_in_seconds = TIME_UNTIL_REMUTE;
@@ -322,7 +290,7 @@ function main()
    //prep for the delayed re-activation of DAW muting (if it was turned on before PNR)
    lasttime=time_precise();
    loopcount=0;
-   defer("runloop();");
+   defer("runloop(TIME_UNTIL_REMUTE, lasttime);");
  
 
    //return variables to original settings, if settings are <= 0 then no data was found during initial query
