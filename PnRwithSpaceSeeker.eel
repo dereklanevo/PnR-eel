@@ -26,7 +26,7 @@ SLICE_OFFSET = .3; // percent to move cursor forward into silent area after dete
 		     // to avoid clipping off the end of a word
 /////////////////////////////////////////////////////////////////////////////
 
-/*
+
 //get the project samplerate, assign 9600 if the query fails
 GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0)  ?
     (
@@ -56,9 +56,9 @@ BLOCK_TIME = BLOCK_LEN / SAMPLERATE;
 
 window_buf = DEVICE_BUF_SIZE; // or wherever you want to set it to;
 temp_buf = window_buf + (WINDOW_LENGTH * 2);
-*/
 
-function fill_array(track, stime, len, arr_to_fill, temp_buf, BLOCK_LEN, SAMPLERATE)
+
+function fill_array(track, stime, len, arr_to_fill)
 local(i monoabsval)
 (
 
@@ -112,9 +112,9 @@ local (i ret)
   ret;
 );
 
-function over_threshold(qtime, temp_buf, BLOCK_LEN, SAMPLERATE, TRACK, WINDOW_TIME, WINDOW_LENGTH, THRESHOLD)
+function over_threshold(qtime)
 (
-    fill_array(TRACK, qtime - (WINDOW_TIME/2), WINDOW_LENGTH, window_buf, temp_buf, BLOCK_LEN, SAMPLERATE); //fills buffer with measures of samples
+    fill_array(TRACK, qtime - (WINDOW_TIME/2), WINDOW_LENGTH, window_buf); //fills buffer with measures of samples
     over = 
       mean_buffer(window_buf, WINDOW_LENGTH) - (THRESHOLD/2); // great than zero if average in buffer exceeds threshhold
 								      // less than or equal to zero if unnder or equal to threshold
@@ -196,40 +196,8 @@ function setTargetTrack(proj)
 );
 */
 
-
-
 function main()
 (
-	   //get the project samplerate, assign 9600 if the query fails
-	GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0)  ?
-		(
-		SAMPLERATE = GetSetProjectInfo(0, "PROJECT_SRATE", 0, 0);
-		)
-	   :
-		(
-		SAMPLERATE = 9600;
-		);
-
-
-	//get the buffer size from the audio device, if the query fails, assign 4096
-	GetAudioDeviceInfo("BSIZE",#devicebufsizestring) ?
-		(
-		match("%d",#devicebufsizestring,DEVICE_BUF_SIZE);
-		)
-	   :
-		(
-		DEVICE_BUF_SIZE = 4096;
-		);
-
-
-
-	WINDOW_LENGTH = (WINDOW_TIME  * SAMPLERATE) ;// how many samples per array when testing?
-	BLOCK_LEN = DEVICE_BUF_SIZE;
-	BLOCK_TIME = BLOCK_LEN / SAMPLERATE;
-
-	window_buf = DEVICE_BUF_SIZE; // or wherever you want to set it to;
-	temp_buf = window_buf + (WINDOW_LENGTH * 2);
-   
    bpos = 0; //start of silence window
    epos = 0; //end of silence window
 
@@ -289,7 +257,7 @@ function main()
    
    //first shift the start point (I don't remember why it's called "mpos") left until a block average
    //stays below the threshold
-	while ( (over_threshold(mpos, temp_buf, BLOCK_LEN, SAMPLERATE, TRACK, WINDOW_TIME, WINDOW_LENGTH, THRESHOLD) > 0) && (mpos>0) ) // "mpos>0" ensure you don't iterate past the start of the track
+	while ( (over_threshold(mpos) > 0) && (mpos>0) ) // "mpos>0" ensure you don't iterate past the start of the track
     (
       mpos -=SEARCH_INCREMENT;
      );
@@ -298,7 +266,7 @@ function main()
     epos = mpos; 
       
 	//keep shifting left until the next block with a block average exceeds the threshold
-     while ( (over_threshold(mpos, temp_buf, BLOCK_LEN, SAMPLERATE, TRACK, WINDOW_TIME, WINDOW_LENGTH, THRESHOLD) <= 0) && (mpos>0) )
+     while ( (over_threshold(mpos) <= 0) && (mpos>0) )
     (
       mpos -=SEARCH_INCREMENT;
      );
