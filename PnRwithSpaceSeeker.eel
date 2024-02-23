@@ -90,7 +90,7 @@ function over_threshold(qtime, temp_buf, BLOCK_LEN, SAMPLERATE, TRACK, WINDOW_TI
 );
 
 
-function runloop(TIME_UNTIL_REMUTE, lasttime)
+function runloop(TIME_UNTIL_REMUTE, lasttime, loopcount, TRACK, TRACK_MUTED_BOOL)
 //waits 5 seconds and then executes the actions
 (
   wait_time_in_seconds = TIME_UNTIL_REMUTE;
@@ -126,7 +126,7 @@ function runloop(TIME_UNTIL_REMUTE, lasttime)
 	    );
   (loopcount < 2) ?
 	  (
-	  defer("runloop();"); 
+	  defer("runloop(TIME_UNTIL_REMUTE, lasttime, loopcount, TRACK, TRACK_MUTED_BOOL);"); 
 	  );
 );
 
@@ -290,7 +290,7 @@ function main()
    //prep for the delayed re-activation of DAW muting (if it was turned on before PNR)
    lasttime=time_precise();
    loopcount=0;
-   defer("runloop(TIME_UNTIL_REMUTE, lasttime);");
+   defer("runloop(TIME_UNTIL_REMUTE, lasttime, loopcount, TRACK, TRACK_MUTED_BOOL);");
  
 
    //return variables to original settings, if settings are <= 0 then no data was found during initial query
